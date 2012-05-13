@@ -52,6 +52,40 @@ class AdjacentCanvas(object):
         c = numpy.dot(self.mat,c)
         return [int(c[0]), int(c[1])]
         
+    def generate_border(self):
+        # get the individual large blogs inside it
+        ccs = self.mask.connected_components(100)
+        
+        # if we have more than just the 4 corners, find the 4 largest blobs
+        if len(ccs) > 4:
+            ccs = sorted(ccs, key=lambda cc:cc.count(), reverse = True)
+        # get the centers of the points
+        if len(ccs) >= 4:
+            self.border_points = [self.convert_point(ccs[0].centroid()), self.convert_point(ccs[1].centroid()),\
+                                  self.convert_point(ccs[2].centroid()), self.convert_point(ccs[3].centroid())]
+        
+        # quadrilateral ordering from http://stackoverflow.com/a/246063
+        def triangle_area(a, b, c):
+            return a[0]*b[1] - a[1]*b[0] + b[0]*c[1] - b[1]*c[0] + c[0]*a[1] - c[1]*a[0]
+        
+        abc = triangle_area(self.border_points[0], self.border_points[1], self.border_points[2])
+        acd = triangle_area(self.border_points[0], self.border_points[2], self.border_points[3])
+        
+        if abc < 0:
+            if acd >= 0:
+                if triangle_area(self.border_points[0], self.border_points[1], self.border_points[3]) < 0:
+                    self.border_points[2], self.border_points[3] = self.border_points[3], self.border_points[2]
+                else:
+                    self.border_points[0], self.border_points[3] = self.border_points[3], self.border_points[0]
+        elif acd < 0:
+            if triangle_area(self.border_points[0], self.border_points[1], self.border_points[3]) < 0:
+                self.border_points[1], self.border_points[2] = self.border_points[2], self.border_points[1]
+            else:
+                self.border_points[0], self.border_points[1] = self.border_points[1], self.border_points[0]
+        else:
+            self.border_points[0], self.border_points[2] = self.border_points[2], self.border_points[0]
+            
+            
     def update_input(self):
         # update the threshold but keep it clamped to valid values
         self.threshold += self.dthreshold
@@ -63,17 +97,9 @@ class AdjacentCanvas(object):
             pygame.transform.threshold(self.t, self.snapshot, (255, 255, 255), (self.threshold, self.threshold, self.threshold), (0, 0, 0), 1)
         
         # get a bitmask of the lit regions
-        mask = pygame.mask.from_threshold(self.snapshot, (255, 255, 255), (self.threshold, self.threshold, self.threshold))
-        # get the individual large blogs inside it
-        ccs = mask.connected_components(100)
+        self.mask = pygame.mask.from_threshold(self.snapshot, (255, 255, 255), (self.threshold, self.threshold, self.threshold))
         
-        # if we have more than just the 4 corners, find the 4 largest blobs
-        if len(ccs) > 4:
-            ccs = sorted(ccs, key=lambda cc:cc.count(), reverse = True)
-        # get the centers of the points
-        if len(ccs) >= 4:
-            self.border_points = [self.convert_point(ccs[0].centroid()), self.convert_point(ccs[1].centroid()),\
-                                  self.convert_point(ccs[2].centroid()), self.convert_point(ccs[3].centroid())]
+        self.generate_border()
         
     def update_display(self):
         self.display.fill((0, 0, 0))
