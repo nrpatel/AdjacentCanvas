@@ -28,11 +28,11 @@ class Tracker(object):
         self.ESC = chr(0xDB)
         self.ESC_END = chr(0xDC)
         self.ESC_ESC = chr(0xDD)
-        self.ser = serial.Serial(port, 38400)
+        self.ser = serial.Serial(port, 38400, timeout=0)
         self.ser.open()
         self.ser.flushInput()
-        # read out any partially complete packet
-        self.read_serial()
+        self.read_buf = []
+        self.escaping = False
     
     def parse_packet(self, packet):
         t = ord(packet[0])
@@ -56,28 +56,40 @@ class Tracker(object):
             
         return None
             
-    def read_serial(self):
-        line = []
-    
-        while True:
-            c = self.ser.read(1)
-            if c == self.END and len(line) != 0:
-                break
-            elif c == self.ESC:
-                c = self.ser.read(1)
-                if c == self.ESC_END:
-                    line.append(self.END)
-                elif c == self.ESC_ESC:
-                    line.append(self.ESC)
+    def read_char(self, c):
+        if c == self.END and len(self.read_buf) != 0:
+            self.escaping = False
+            return 1
+        elif c == self.ESC:
+            self.escaping = True
+        elif c == self.ESC_END:
+            if self.escaping:
+                self.read_buf.append(self.END)
+                self.escaping = False
             else:
-                line.append(c)
+                self.read_buf.append(c)
+        elif c == self.ESC_ESC:
+            if self.escaping:
+                self.read_buf.append(self.ESC)
+                self.escaping = False
+            else:
+                self.read_buf.append(c)
+        else:
+            self.read_buf.append(c)
                 
-        return line
+        return 0
         
-    def read_packet(self):
-        line = self.read_serial()
-                
-        return self.parse_packet(''.join(line))
+    def read_packets(self):
+        packets = []
+        characters = self.ser.read(1024)
+        if len(characters):
+            for c in characters:
+                if self.read_char(c):
+                    packet = self.parse_packet(''.join(self.read_buf))
+                    if packet:
+                        packets.append(packet)
+                    self.read_buf = []
+        return packets
         
     def write_packet(self, packet):
         slipped = [];
@@ -124,6 +136,9 @@ class Tracker(object):
     def set_power(self, power):
         packed = struct.pack('!BB', PACKET_POWER, power)
         self.write_packet(packed)
+        
+    def close(self):
+        self.ser.close()
 
 if __name__ == '__main__':
     port = '/dev/ttyACM0'
@@ -131,7 +146,9 @@ if __name__ == '__main__':
         port = sys.argv[1]
     tracker = Tracker(port)
     tracker.set_color((255, 0, 255))
-    tracker.set_streaming_mode(1, 0, 0, 0, 0, 0)
+    tracker.set_streaming_mode(1, 0, 0, 0, 0, 1)
     while True:
-        print tracker.read_packet()
+        packets = tracker.read_packets()
+        for packet in packets:
+            print packet
 

@@ -96,7 +96,7 @@ class IRCamera(FakeSource):
         
     def get_point(self):
         """Return the centroid of the largest IR blob found"""
-        mask = pygame.mask.from_threshold(self.snapshot, (255,255,255), (10,10,10))
+        mask = pygame.mask.from_threshold(self.snapshot, (255,255,255), (50,50,50))
         cc = mask.connected_component()
         # find the center of the dot, assuming its big enough to not be noise
         if cc.count() < 100:
@@ -211,7 +211,7 @@ class Homography:
         
     def display_new_point(self):
         # blank out the display
-        self.display.fill((0,0,0))
+        self.display.fill((255,255,255))
         pygame.display.flip()
         
     def update_display(self):
@@ -325,7 +325,8 @@ if __name__ == '__main__':
     if source:
         hom = Homography(resolution, algo, source)
         m = hom.run()
-        print 'Saving matrix to %s.npy\n %s' % (matrix_file, repr(m))
-        numpy.save(matrix_file,m)
+        if m != None:
+            print 'Saving matrix to %s.npy\n %s' % (matrix_file, repr(m))
+            numpy.save(matrix_file,m)
     else:
         print 'No source found.'
